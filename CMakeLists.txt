@@ -21,5 +21,8 @@ find_package(SEAL 3.2.0 EXACT REQUIRED)
 
 target_link_libraries(main sealpir SEAL::seal)
 
+find_package(OpenMP REQUIRED)
+target_link_libraries(sealpir PUBLIC OpenMP::OpenMP_CXX)
+
 install(TARGETS sealpir ARCHIVE DESTINATION lib LIBRARY DESTINATION lib)
 install(FILES pir.hpp pir_client.hpp pir_server.hpp DESTINATION include/sealpir)

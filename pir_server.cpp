@@ -1,3 +1,5 @@
+// vim: set expandtab:
+// vim: set tabstop=4:
 #include "pir_server.hpp"
 #include "pir_client.hpp"
 
@@ -17,6 +19,7 @@ PIRServer::PIRServer(const EncryptionParameters &params, const PirParams &pir_pa
 void PIRServer::preprocess_database() {
     if (!is_db_preprocessed_) {
 
+        #pragma omp parallel for
         for (uint32_t i = 0; i < db_->size(); i++) {
             evaluator_->transform_to_ntt_inplace(
                 db_->operator[](i), params_.parms_id());
@@ -192,27 +195,31 @@ PirReply PIRServer::generate_reply(PirQuery query, uint32_t client_id) {
 
         // Transform plaintext to NTT. If database is pre-processed, can skip
         if ((!is_db_preprocessed_) || i > 0) {
+            #pragma omp parallel for
             for (uint32_t jj = 0; jj < cur->size(); jj++) {
                 evaluator_->transform_to_ntt_inplace((*cur)[jj], params_.parms_id());
             }
         }
 
+        /*
         for (uint64_t k = 0; k < product; k++) {
             if ((*cur)[k].is_zero()){
                 cout << k + 1 << "/ " << product <<  "-th ptxt = 0 " << endl; 
             }
         }
+        */
 
         product /= n_i;
 
         vector<Ciphertext> intermediateCtxts(product);
-        Ciphertext temp;
 
+        #pragma omp parallel for
         for (uint64_t k = 0; k < product; k++) {
 
             evaluator_->multiply_plain(expanded_query[0], (*cur)[k], intermediateCtxts[k]);
 
             for (uint64_t j = 1; j < n_i; j++) {
+                Ciphertext temp;
                 evaluator_->multiply_plain(expanded_query[j], (*cur)[k + j * product], temp);
                 evaluator_->add_inplace(intermediateCtxts[k], temp); // Adds to first component.
             }
@@ -282,10 +289,6 @@ inline vector<Ciphertext> PIRServer::expand_query(const Ciphertext &encrypted, u
 
     vector<Ciphertext> temp;
     temp.push_back(encrypted);
-    Ciphertext tempctxt;
-    Ciphertext tempctxt_rotated;
-    Ciphertext tempctxt_shifted;
-    Ciphertext tempctxt_rotatedshifted;
 
 
     for (uint32_t i = 0; i < logm - 1; i++) {
@@ -295,7 +298,11 @@ inline vector<Ciphertext> PIRServer::expand_query(const Ciphertext &encrypted, u
         int index_raw = (n << 1) - (1 << i);
         int index = (index_raw * galois_elts[i]) % (n << 1);
 
+        #pragma omp parallel for
         for (uint32_t a = 0; a < temp.size(); a++) {
+            Ciphertext tempctxt_rotated;
+            Ciphertext tempctxt_shifted;
+            Ciphertext tempctxt_rotatedshifted;
 
             evaluator_->apply_galois(temp[a], galois_elts[i], galkey, tempctxt_rotated);
 
@@ -333,6 +340,9 @@ inline vector<Ciphertext> PIRServer::expand_query(const Ciphertext &encrypted, u
             evaluator_->multiply_plain(temp[a], two, newtemp[a]); // plain multiplication by 2.
             // cout << client.decryptor_->invariant_noise_budget(newtemp[a]) << ", "; 
         } else {
+            Ciphertext tempctxt_rotated;
+            Ciphertext tempctxt_shifted;
+            Ciphertext tempctxt_rotatedshifted;
             evaluator_->apply_galois(temp[a], galois_elts[logm - 1], galkey, tempctxt_rotated);
             evaluator_->add(temp[a], tempctxt_rotated, newtemp[a]);
             multiply_power_of_X(temp[a], tempctxt_shifted, index_raw);

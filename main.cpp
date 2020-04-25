@@ -14,7 +14,7 @@ using namespace seal;
 
 int main(int argc, char *argv[]) {
 
-    uint64_t number_of_items = 1 << 12;
+    uint64_t number_of_items = 1 << 20;
     uint64_t size_per_item = 288; // in bytes
     uint32_t N = 2048;
 
@@ -41,7 +41,8 @@ int main(int argc, char *argv[]) {
     random_device rd;
     for (uint64_t i = 0; i < number_of_items; i++) {
         for (uint64_t j = 0; j < size_per_item; j++) {
-            auto val = rd() % 256;
+            auto val = (i * size_per_item + j) % 256;
+            //auto val = rd() % 256;
             db.get()[(i * size_per_item) + j] = val;
             db_copy.get()[(i * size_per_item) + j] = val;
         }
