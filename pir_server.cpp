@@ -17,16 +17,17 @@ PIRServer::PIRServer(const EncryptionParameters &params, const PirParams &pir_pa
 }
 
 void PIRServer::preprocess_database() {
-    if (!is_db_preprocessed_) {
+    if (is_db_preprocessed_) return;
 
-        #pragma omp parallel for
-        for (uint32_t i = 0; i < db_->size(); i++) {
-            evaluator_->transform_to_ntt_inplace(
-                db_->operator[](i), params_.parms_id());
-        }
+    const auto db_size = db_->size();
+    const auto parms_id = params_.parms_id();
 
-        is_db_preprocessed_ = true;
+    #pragma omp parallel for
+    for (uint32_t i = 0; i < db_size; i++) {
+        evaluator_->transform_to_ntt_inplace(db_->operator[](i), parms_id);
     }
+
+    is_db_preprocessed_ = true;
 }
 
 // Server takes over ownership of db and will free it when it exits
@@ -56,7 +57,7 @@ void PIRServer::set_database(const std::unique_ptr<const std::uint8_t[]> &bytes,
     uint64_t matrix_plaintexts = prod;
     assert(total <= matrix_plaintexts);
 
-    auto result = make_unique<vector<Plaintext>>();
+    auto result = make_unique<vector<Plaintext>>(total);
     result->reserve(matrix_plaintexts);
 
     uint64_t ele_per_ptxt = elements_per_ptxt(logt, N, ele_size);
@@ -70,37 +71,29 @@ void PIRServer::set_database(const std::unique_ptr<const std::uint8_t[]> &bytes,
     cout << "Server: total number of FV plaintext = " << total << endl;
     cout << "Server: elements packed into each plaintext " << ele_per_ptxt << endl; 
 
-    uint32_t offset = 0;
-
+    #pragma omp parallel for
     for (uint64_t i = 0; i < total; i++) {
 
-        uint64_t process_bytes = 0;
-
-        if (db_size <= offset) {
-            break;
-        } else if (db_size < offset + bytes_per_ptxt) {
-            process_bytes = db_size - offset;
-        } else {
-            process_bytes = bytes_per_ptxt;
-        }
+        const uint32_t offset = i * bytes_per_ptxt;
+        const uint64_t process_bytes = (db_size < offset + bytes_per_ptxt ? db_size - offset : bytes_per_ptxt);
 
         // Get the coefficients of the elements that will be packed in plaintext i
         vector<uint64_t> coefficients = bytes_to_coeffs(logt, bytes.get() + offset, process_bytes);
-        offset += process_bytes;
 
-        uint64_t used = coefficients.size();
+        const uint64_t used = coefficients.size();
 
         assert(used <= coeff_per_ptxt);
 
         // Pad the rest with 1s
-        for (uint64_t j = 0; j < (N - used); j++) {
-            coefficients.push_back(1);
+        coefficients.resize(N);
+        for (uint64_t j = used; j < N; j++) {
+            coefficients.at(j) = 1;
         }
 
         Plaintext plain;
         vector_to_plaintext(coefficients, plain);
         // cout << i << "-th encoded plaintext = " << plain.to_string() << endl; 
-        result->push_back(move(plain));
+        result->at(i) = plain;
     }
 
     // Add padding to make database a matrix
@@ -158,7 +151,7 @@ PirReply PIRServer::generate_reply(PirQuery query, uint32_t client_id) {
 
         vector<Ciphertext> expanded_query; 
 
-        uint64_t n_i = nvec[i];
+        const uint64_t n_i = nvec[i];
         cout << "Server: n_i = " << n_i << endl; 
         cout << "Server: expanding " << query[i].size() << " query ctxts" << endl;
         for (uint32_t j = 0; j < query[i].size(); j++){

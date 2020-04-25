@@ -99,11 +99,6 @@ uint32_t plainmod_after_expansion(uint32_t logt, uint32_t N, uint32_t d,
     return logt;
 }
 
-// Number of coefficients needed to represent a database element
-uint64_t coefficients_per_element(uint32_t logtp, uint64_t ele_size) {
-    return ceil(8 * ele_size / (double)logtp);
-}
-
 // Number of database elements that can fit in a single FV plaintext
 uint64_t elements_per_ptxt(uint32_t logt, uint64_t N, uint64_t ele_size) {
     uint64_t coeff_per_ele = coefficients_per_element(logt, ele_size);
@@ -128,19 +123,14 @@ vector<uint64_t> bytes_to_coeffs(uint32_t limit, const uint8_t *bytes, uint64_t 
 
     for (uint32_t i = 0; i < size; i++) {
         uint8_t src = bytes[i];
-        uint32_t rest = 8;
-        while (rest) {
+        for (uint32_t rest=8; rest!=0;) {
             if (room == 0) {
                 target++;
                 room = limit;
             }
-            uint32_t shift = rest;
-            if (room < rest) {
-                shift = room;
-            }
-            *target = *target << shift;
-            *target = *target | (src >> (8 - shift));
-            src = src << shift;
+            const uint32_t shift = min(room, rest);
+            *target = (*target << shift) | (src >> (8 - shift));
+            src <<= shift;
             room -= shift;
             rest -= shift;
         }

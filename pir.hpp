@@ -42,7 +42,7 @@ std::uint64_t plaintexts_per_db(std::uint32_t logtp, std::uint64_t N, std::uint6
 std::uint64_t elements_per_ptxt(std::uint32_t logtp, std::uint64_t N, std::uint64_t ele_size);
 
 // returns the number of coefficients needed to store one element
-std::uint64_t coefficients_per_element(std::uint32_t logtp, std::uint64_t ele_size);
+#define coefficients_per_element(logtp, ele_size) (ceil(8 * (ele_size) / (double)(logtp)))
 
 // Converts an array of bytes to a vector of coefficients, each of which is less
 // than the plaintext modulus
