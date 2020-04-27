@@ -11,21 +11,24 @@ add_executable(main
 	main.cpp
 )
 
+add_subdirectory(./SEAL/native/src)
+set(SEAL_DIR ./SEAL/native/src/cmake)
+set(CMAKE_CXX_FLAGS -I./SEAL/native/src)
+#find_package(SEAL 3.2.0 EXACT REQUIRED)
+
 add_library(sealpir STATIC
   pir.cpp
   pir_client.cpp
   pir_server.cpp
 )
 
-set(SEAL_DIR ./SEAL/native/src/cmake)
-find_package(SEAL 3.2.0 EXACT REQUIRED)
-
-target_link_libraries(main sealpir SEAL::seal)
-
+# Add OpenMP dependency, if available.
 find_package(OpenMP)
 if(OpenMP_CXX_FOUND)
   target_link_libraries(sealpir PUBLIC OpenMP::OpenMP_CXX)
 endif()
+
+target_link_libraries(main sealpir seal)
 
 install(TARGETS sealpir ARCHIVE DESTINATION lib LIBRARY DESTINATION lib)
 install(FILES pir.hpp pir_client.hpp pir_server.hpp DESTINATION include/sealpir)
