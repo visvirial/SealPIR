@@ -161,14 +161,14 @@ PirReply PIRServer::generate_reply(PirQuery query, uint32_t client_id) {
             }
             cout << "-- expanding one query ctxt into " << total  << " ctxts "<< endl;
             vector<Ciphertext> expanded_query_part = expand_query(query[i][j], total, client_id);
-            expanded_query.insert(expanded_query.end(), std::make_move_iterator(expanded_query_part.begin()), 
+            expanded_query.insert(expanded_query.end(), std::make_move_iterator(expanded_query_part.begin()),
                     std::make_move_iterator(expanded_query_part.end()));
-            expanded_query_part.clear(); 
+            expanded_query_part.clear();
         }
         cout << "Server: expansion done " << endl; 
         if (expanded_query.size() != n_i) {
             cout << " size mismatch!!! " << expanded_query.size() << ", " << n_i << endl; 
-        }    
+        }
 
         /*
         cout << "Checking expanded query " << endl; 
@@ -182,6 +182,7 @@ PirReply PIRServer::generate_reply(PirQuery query, uint32_t client_id) {
         */
 
         // Transform expanded query to NTT, and ...
+        #pragma omp parallel for
         for (uint32_t jj = 0; jj < expanded_query.size(); jj++) {
             evaluator_->transform_to_ntt_inplace(expanded_query[jj]);
         }
@@ -193,14 +194,6 @@ PirReply PIRServer::generate_reply(PirQuery query, uint32_t client_id) {
                 evaluator_->transform_to_ntt_inplace((*cur)[jj], params_.parms_id());
             }
         }
-
-        /*
-        for (uint64_t k = 0; k < product; k++) {
-            if ((*cur)[k].is_zero()){
-                cout << k + 1 << "/ " << product <<  "-th ptxt = 0 " << endl; 
-            }
-        }
-        */
 
         product /= n_i;
 
@@ -216,25 +209,21 @@ PirReply PIRServer::generate_reply(PirQuery query, uint32_t client_id) {
                 evaluator_->multiply_plain(expanded_query[j], (*cur)[k + j * product], temp);
                 evaluator_->add_inplace(intermediateCtxts[k], temp); // Adds to first component.
             }
-        }
-
-        for (uint32_t jj = 0; jj < intermediateCtxts.size(); jj++) {
-            evaluator_->transform_from_ntt_inplace(intermediateCtxts[jj]);
-            // print intermediate ctxts? 
-            //cout << "const term of ctxt " << jj << " = " << intermediateCtxts[jj][0] << endl; 
+            evaluator_->transform_from_ntt_inplace(intermediateCtxts[k]);
         }
 
         if (i == nvec.size() - 1) {
             return intermediateCtxts;
         } else {
             intermediate_plain.clear();
-            intermediate_plain.reserve(pir_params_.expansion_ratio * product);
+            intermediate_plain.resize(pir_params_.expansion_ratio * product);
             cur = &intermediate_plain;
 
             auto tempplain = util::allocate<Plaintext>(
                 pir_params_.expansion_ratio * product,
                 pool, coeff_count);
 
+            #pragma omp parallel for
             for (uint64_t rr = 0; rr < product; rr++) {
 
                 decompose_to_plaintexts_ptr(intermediateCtxts[rr],
@@ -242,7 +231,7 @@ PirReply PIRServer::generate_reply(PirQuery query, uint32_t client_id) {
 
                 for (uint32_t jj = 0; jj < pir_params_.expansion_ratio; jj++) {
                     auto offset = rr * pir_params_.expansion_ratio + jj;
-                    intermediate_plain.emplace_back(tempplain[offset]);
+                    intermediate_plain[offset] = tempplain[offset];
                 }
             }
             product *= pir_params_.expansion_ratio; // multiply by expansion rate.
@@ -328,6 +317,7 @@ inline vector<Ciphertext> PIRServer::expand_query(const Ciphertext &encrypted, u
     vector<Ciphertext> newtemp(temp.size() << 1);
     int index_raw = (n << 1) - (1 << (logm - 1));
     int index = (index_raw * galois_elts[logm - 1]) % (n << 1);
+    #pragma omp parallel for
     for (uint32_t a = 0; a < temp.size(); a++) {
         if (a >= (m - (1 << (logm - 1)))) {                       // corner case.
             evaluator_->multiply_plain(temp[a], two, newtemp[a]); // plain multiplication by 2.
