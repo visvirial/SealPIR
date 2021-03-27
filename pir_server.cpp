@@ -189,8 +189,9 @@ PirReply PIRServer::generate_reply(PirQuery query, uint32_t client_id) {
 
         // Transform plaintext to NTT. If database is pre-processed, can skip
         if ((!is_db_preprocessed_) || i > 0) {
+            const auto cur_size = cur->size();
             #pragma omp parallel for
-            for (uint32_t jj = 0; jj < cur->size(); jj++) {
+            for (uint32_t jj = 0; jj < cur_size; jj++) {
                 evaluator_->transform_to_ntt_inplace((*cur)[jj], params_.parms_id());
             }
         }
